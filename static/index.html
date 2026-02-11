@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced ATS Resume Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
+    <style>
+        * {
+            font-family: 'Outfit', sans-serif;
+        }
+        
+        .mono {
+            font-family: 'Space Mono', monospace;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+        }
+        
+        .glassmorphism {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .neon-border {
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.5),
+                        0 0 40px rgba(118, 75, 162, 0.3);
+        }
+        
+        .upload-zone {
+            border: 3px dashed rgba(102, 126, 234, 0.5);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .upload-zone:hover, .upload-zone.drag-over {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            transform: scale(1.02);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-primary::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-primary:hover::before {
+            left: 100%;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .score-circle {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: conic-gradient(
+                #667eea 0deg,
+                #667eea calc(var(--score) * 3.6deg),
+                rgba(255,255,255,0.1) calc(var(--score) * 3.6deg)
+            );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            animation: rotateIn 1s ease-out;
+        }
+        
+        @keyframes rotateIn {
+            from {
+                transform: rotate(-180deg) scale(0.5);
+                opacity: 0;
+            }
+            to {
+                transform: rotate(0deg) scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .score-circle::before {
+            content: '';
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            background: #1a1a2e;
+            position: absolute;
+        }
+        
+        .score-text {
+            position: relative;
+            z-index: 1;
+            font-size: 3rem;
+            font-weight: 800;
+            color: #667eea;
+        }
+        
+        .loading-dots {
+            display: inline-flex;
+            gap: 8px;
+        }
+        
+        .loading-dots span {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #667eea;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        
+        .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes bounce {
+            0%, 80%, 100% {
+                transform: scale(0);
+            }
+            40% {
+                transform: scale(1);
+            }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.6s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .tab-active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .rank-badge {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.5rem;
+        }
+        
+        .rank-1 { background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%); }
+        .rank-2 { background: linear-gradient(135deg, #C0C0C0 0%, #A8A8A8 100%); }
+        .rank-3 { background: linear-gradient(135deg, #CD7F32 0%, #B87333 100%); }
+        
+        .progress-bar {
+            height: 8px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.1);
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 1s ease-out;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .card:hover {
+            border-color: rgba(102, 126, 234, 0.5);
+            transform: translateY(-5px);
+        }
+        
+        .interview-question {
+            background: rgba(102, 126, 234, 0.1);
+            border-left: 4px solid #667eea;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+        }
+        
+        .mic-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .mic-button:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(102, 126, 234, 0.6);
+        }
+        
+        .mic-button.recording {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(102, 126, 234, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 20px rgba(102, 126, 234, 0);
+            }
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 10px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <!-- Navigation -->
+    <nav class="glassmorphism sticky top-0 z-50">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="text-3xl">
+                        <i class="fas fa-brain gradient-text"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold gradient-text">ATS Pro</h1>
+                        <p class="text-xs text-gray-400 mono">Next-Gen Resume Intelligence</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-6">
+                    <button onclick="showView('dashboard')" class="nav-btn text-gray-300 hover:text-white transition">
+                        <i class="fas fa-home mr-2"></i>Dashboard
+                    </button>
+                    <button onclick="showView('batch')" class="nav-btn text-gray-300 hover:text-white transition">
+                        <i class="fas fa-layer-group mr-2"></i>Batch Analysis
+                    </button>
+                    <button onclick="showView('rankings')" class="nav-btn text-gray-300 hover:text-white transition">
+                        <i class="fas fa-trophy mr-2"></i>Rankings
+                    </button>
+                    <button onclick="showView('interview')" class="nav-btn text-gray-300 hover:text-white transition">
+                        <i class="fas fa-microphone mr-2"></i>AI Interview
+                    </button>
+                    <div id="userProfile" class="hidden">
+                        <button onclick="logout()" class="btn-primary px-4 py-2 rounded-lg">
+                            <i class="fas fa-sign-out-alt mr-2"></i>Logout
+                        </button>
+                    </div>
+                    <div id="loginButton">
+                        <button onclick="showLogin()" class="btn-primary px-4 py-2 rounded-lg">
+                            <i class="fas fa-sign-in-alt mr-2"></i>Login
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container mx-auto px-6 py-8">
+        
+        <!-- Dashboard View -->
+        <div id="dashboardView" class="view-container">
+            <!-- Hero Section -->
+            <div class="text-center mb-12">
+                <h2 class="text-5xl font-bold mb-4">
+                    <span class="gradient-text">Supercharge Your Resume</span>
+                </h2>
+                <p class="text-xl text-gray-300">AI-powered analysis, ranking, and interview preparation</p>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
+                <div class="card p-6 text-center">
+                    <i class="fas fa-file-alt text-4xl mb-3 gradient-text"></i>
+                    <h3 class="text-2xl font-bold" id="totalAnalyzed">0</h3>
+                    <p class="text-gray-400 text-sm">Resumes Analyzed</p>
+                </div>
+                <div class="card p-6 text-center">
+                    <i class="fas fa-chart-line text-4xl mb-3 gradient-text"></i>
+                    <h3 class="text-2xl font-bold" id="avgScore">--</h3>
+                    <p class="text-gray-400 text-sm">Average Score</p>
+                </div>
+                <div class="card p-6 text-center">
+                    <i class="fas fa-trophy text-4xl mb-3 gradient-text"></i>
+                    <h3 class="text-2xl font-bold" id="topRanked">--</h3>
+                    <p class="text-gray-400 text-sm">Top Ranked</p>
+                </div>
+                <div class="card p-6 text-center">
+                    <i class="fas fa-microphone text-4xl mb-3 gradient-text"></i>
+                    <h3 class="text-2xl font-bold" id="interviewsDone">0</h3>
+                    <p class="text-gray-400 text-sm">Interviews Completed</p>
+                </div>
+            </div>
+
+            <!-- Upload Section -->
+            <div class="card p-8 mb-8">
+                <h2 class="text-3xl font-bold mb-6">
+                    <i class="fas fa-upload mr-3 gradient-text"></i>
+                    Single Resume Analysis
+                </h2>
+                
+                <div class="grid md:grid-cols-2 gap-6 mb-6">
+                    <!-- File Upload -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-300 mb-3">
+                            <i class="fas fa-file-pdf mr-2"></i>Upload PDF Resume
+                        </label>
+                        <div id="uploadArea" class="upload-zone rounded-xl p-12 text-center cursor-pointer">
+                            <input type="file" id="resumeFile" accept=".pdf" class="hidden">
+                            <i class="fas fa-cloud-upload-alt text-6xl text-purple-400 mb-4"></i>
+                            <p class="text-gray-300 mb-2 font-semibold">Drag & drop your resume here</p>
+                            <p class="text-sm text-gray-500">or click to browse</p>
+                            <p id="fileName" class="text-sm gradient-text mt-3 font-semibold"></p>
+                        </div>
+                    </div>
+                    
+                    <!-- Text Input -->
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-300 mb-3">
+                            <i class="fas fa-keyboard mr-2"></i>Or Paste Resume Text
+                        </label>
+                        <textarea 
+                            id="resumeText" 
+                            rows="10" 
+                            class="w-full bg-gray-900 bg-opacity-50 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            placeholder="Paste your resume text here..."></textarea>
+                    </div>
+                </div>
+
+                <!-- Job Description -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-300 mb-3">
+                        <i class="fas fa-briefcase mr-2"></i>Job Description (Optional but Recommended)
+                    </label>
+                    <textarea 
+                        id="jdText" 
+                        rows="5" 
+                        class="w-full bg-gray-900 bg-opacity-50 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        placeholder="Paste the job description to get keyword matching insights..."></textarea>
+                </div>
+
+                <!-- Analysis Type Selection -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-300 mb-3">
+                        <i class="fas fa-sliders-h mr-2"></i>Analysis Type
+                    </label>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <button onclick="selectAnalysisType('basic')" 
+                                class="analysis-btn bg-purple-600 text-white rounded-xl p-6 hover:bg-purple-700 transition-all neon-border">
+                            <i class="fas fa-chart-line mb-2 text-3xl"></i>
+                            <p class="font-semibold">Basic ATS</p>
+                        </button>
+                        <button onclick="selectAnalysisType('match')" 
+                                class="analysis-btn bg-gray-800 text-gray-300 rounded-xl p-6 hover:bg-purple-600 hover:text-white transition-all">
+                            <i class="fas fa-bullseye mb-2 text-3xl"></i>
+                            <p class="font-semibold">JD Match</p>
+                        </button>
+                        <button onclick="selectAnalysisType('review')" 
+                                class="analysis-btn bg-gray-800 text-gray-300 rounded-xl p-6 hover:bg-purple-600 hover:text-white transition-all">
+                            <i class="fas fa-clipboard-check mb-2 text-3xl"></i>
+                            <p class="font-semibold">AI Review</p>
+                        </button>
+                        <button onclick="selectAnalysisType('skills')" 
+                                class="analysis-btn bg-gray-800 text-gray-300 rounded-xl p-6 hover:bg-purple-600 hover:text-white transition-all">
+                            <i class="fas fa-brain mb-2 text-3xl"></i>
+                            <p class="font-semibold">Skills Gap</p>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Analyze Button -->
+                <button 
+                    onclick="analyzeResume()" 
+                    class="btn-primary w-full py-6 rounded-xl font-bold text-lg shadow-2xl">
+                    <i class="fas fa-magic mr-2"></i>Analyze Resume with AI
+                </button>
+            </div>
+
+            <!-- Loading State -->
+            <div id="loadingState" class="hidden card p-12 mb-8 text-center">
+                <div class="loading-dots mb-6 justify-center">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <p class="text-xl font-semibold gradient-text">Analyzing your resume...</p>
+                <p class="text-sm text-gray-400 mt-2 mono">This may take a few seconds</p>
+            </div>
+
+            <!-- Results Section -->
+            <div id="resultsSection" class="hidden fade-in">
+                <!-- Score Card -->
+                <div class="card p-8 mb-8">
+                    <h2 class="text-3xl font-bold mb-8 text-center">
+                        <i class="fas fa-trophy mr-3 text-yellow-400"></i>
+                        <span class="gradient-text">Your ATS Score</span>
+                    </h2>
+                    
+                    <div class="flex flex-col md:flex-row items-center justify-around gap-8">
+                        <!-- Main Score -->
+                        <div class="text-center">
+                            <div class="score-circle mx-auto mb-4" style="--score: 75">
+                                <div class="score-text mono" id="finalScore">--</div>
+                            </div>
+                            <p class="text-gray-300 font-semibold text-lg">Overall ATS Score</p>
+                            <p class="text-sm mt-2" id="scoreLabel">Calculating...</p>
+                        </div>
+                        
+                        <!-- Score Breakdown -->
+                        <div class="space-y-6 w-full md:w-1/2">
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-gray-300 flex items-center">
+                                        <i class="fas fa-list-ul mr-2 text-purple-400"></i>Sections
+                                    </span>
+                                    <span class="font-bold mono" id="sectionScore">--</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="sectionBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-gray-300 flex items-center">
+                                        <i class="fas fa-key mr-2 text-green-400"></i>Keywords
+                                    </span>
+                                    <span class="font-bold mono" id="keywordScore">--</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="keywordBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-gray-300 flex items-center">
+                                        <i class="fas fa-bolt mr-2 text-yellow-400"></i>Action Verbs
+                                    </span>
+                                    <span class="font-bold mono" id="actionScore">--</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="actionBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div class="flex items-center justify-between mb-2">
+                                    <span class="text-gray-300 flex items-center">
+                                        <i class="fas fa-chart-bar mr-2 text-blue-400"></i>Metrics
+                                    </span>
+                                    <span class="font-bold mono" id="metricScore">--</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" id="metricBar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Download Report Button -->
+                    <div class="text-center mt-8">
+                        <button onclick="downloadReport()" class="btn-primary px-8 py-4 rounded-xl font-bold">
+                            <i class="fas fa-download mr-2"></i>Download Detailed Report (PDF)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Detailed Analysis Tabs -->
+                <div class="card mb-8">
+                    <div class="border-b border-gray-700">
+                        <div class="flex overflow-x-auto">
+                            <button onclick="switchTab('suggestions')" class="tab-btn tab-active px-8 py-4 font-semibold transition-all">
+                                <i class="fas fa-lightbulb mr-2"></i>Suggestions
+                            </button>
+                            <button onclick="switchTab('sections')" class="tab-btn px-8 py-4 font-semibold text-gray-400 transition-all">
+                                <i class="fas fa-th-list mr-2"></i>Sections
+                            </button>
+                            <button onclick="switchTab('weakphrases')" class="tab-btn px-8 py-4 font-semibold text-gray-400 transition-all">
+                                <i class="fas fa-exclamation-triangle mr-2"></i>Weak Phrases
+                            </button>
+                            <button onclick="switchTab('ai')" class="tab-btn px-8 py-4 font-semibold text-gray-400 transition-all">
+                                <i class="fas fa-robot mr-2"></i>AI Insights
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="p-8">
+                        <!-- Suggestions Tab -->
+                        <div id="suggestionsTab" class="tab-content">
+                            <h3 class="text-2xl font-bold mb-6 gradient-text">
+                                <i class="fas fa-magic mr-2"></i>
+                                Improvement Suggestions
+                            </h3>
+                            <div id="suggestionsList" class="space-y-4">
+                                <!-- Suggestions will be inserted here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Sections Tab -->
+                        <div id="sectionsTab" class="tab-content hidden">
+                            <h3 class="text-2xl font-bold mb-6 gradient-text">
+                                <i class="fas fa-check-circle mr-2"></i>
+                                Resume Sections Analysis
+                            </h3>
+                            <div id="sectionsList" class="grid md:grid-cols-2 gap-4 mb-8">
+                                <!-- Sections will be inserted here -->
+                            </div>
+                            
+                            <h3 class="text-2xl font-bold mb-6 gradient-text">
+                                <i class="fas fa-list mr-2"></i>
+                                Bullet Points (Top 10)
+                            </h3>
+                            <div id="bulletsList" class="space-y-3">
+                                <!-- Bullets will be inserted here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Weak Phrases Tab -->
+                        <div id="weakphrasesTab" class="tab-content hidden">
+                            <h3 class="text-2xl font-bold mb-6 gradient-text">
+                                <i class="fas fa-ban mr-2"></i>
+                                Weak Phrases to Replace
+                            </h3>
+                            <div id="weakPhrasesList">
+                                <!-- Weak phrases will be inserted here -->
+                            </div>
+                        </div>
+                        
+                        <!-- AI Insights Tab -->
+                        <div id="aiTab" class="tab-content hidden">
+                            <h3 class="text-2xl font-bold mb-6 gradient-text">
+                                <i class="fas fa-brain mr-2"></i>
+                                AI-Powered Deep Insights
+                            </h3>
+                            <div id="aiInsights" class="text-gray-300">
+                                <p>Run an AI analysis to see detailed insights</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Batch Analysis View -->
+        <div id="batchView" class="view-container hidden">
+            <div class="card p-8 mb-8">
+                <h2 class="text-3xl font-bold mb-6 gradient-text">
+                    <i class="fas fa-layer-group mr-3"></i>
+                    Batch Resume Analysis & Ranking
+                </h2>
+                
+                <p class="text-gray-300 mb-6">Upload multiple resumes to analyze and rank them against a job description</p>
+                
+                <!-- Job Description for Batch -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-300 mb-3">
+                        <i class="fas fa-briefcase mr-2"></i>Job Description (Required for Ranking)
+                    </label>
+                    <textarea 
+                        id="batchJdText" 
+                        rows="5" 
+                        class="w-full bg-gray-900 bg-opacity-50 border border-gray-700 rounded-xl p-4 text-white focus:ring-2 focus:ring-purple-500"
+                        placeholder="Paste the job description here..."></textarea>
+                </div>
+                
+                <!-- Multiple File Upload -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-300 mb-3">
+                        <i class="fas fa-files-medical mr-2"></i>Upload Multiple Resumes
+                    </label>
+                    <div id="batchUploadArea" class="upload-zone rounded-xl p-12 text-center cursor-pointer">
+                        <input type="file" id="batchFiles" accept=".pdf" multiple class="hidden">
+                        <i class="fas fa-cloud-upload-alt text-6xl text-purple-400 mb-4"></i>
+                        <p class="text-gray-300 mb-2 font-semibold">Drag & drop multiple resumes here</p>
+                        <p class="text-sm text-gray-500">or click to browse (PDF only)</p>
+                        <p id="batchFileCount" class="text-sm gradient-text mt-3 font-semibold"></p>
+                    </div>
+                </div>
+                
+                <!-- Analyze Button -->
+                <button onclick="analyzeBatch()" class="btn-primary w-full py-6 rounded-xl font-bold text-lg">
+                    <i class="fas fa-rocket mr-2"></i>Analyze & Rank All Resumes
+                </button>
+            </div>
+            
+            <!-- Batch Results -->
+            <div id="batchResults" class="hidden">
+                <div class="card p-8 mb-8">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-2xl font-bold gradient-text">
+                            <i class="fas fa-trophy mr-2"></i>Ranking Results
+                        </h3>
+                        <div class="space-x-4">
+                            <button onclick="downloadBatchReports()" class="btn-primary px-6 py-3 rounded-lg">
+                                <i class="fas fa-file-pdf mr-2"></i>Download All Reports (ZIP)
+                            </button>
+                            <button onclick="exportRankingsCSV()" class="btn-primary px-6 py-3 rounded-lg">
+                                <i class="fas fa-file-csv mr-2"></i>Export to CSV
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="rankingsList" class="space-y-4">
+                        <!-- Rankings will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rankings View -->
+        <div id="rankingsView" class="view-container hidden">
+            <div class="card p-8">
+                <h2 class="text-3xl font-bold mb-6 gradient-text">
+                    <i class="fas fa-crown mr-3"></i>
+                    Overall Rankings & Leaderboard
+                </h2>
+                
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-300 mb-3">
+                        Filter by Job Description
+                    </label>
+                    <input 
+                        type="text" 
+                        id="rankingsFilter" 
+                        class="w-full bg-gray-900 bg-opacity-50 border border-gray-700 rounded-xl p-4 text-white"
+                        placeholder="Enter job title or keywords...">
+                </div>
+                
+                <button onclick="loadRankings()" class="btn-primary px-6 py-3 rounded-lg mb-6">
+                    <i class="fas fa-search mr-2"></i>Search Rankings
+                </button>
+                
+                <div id="overallRankings" class="space-y-4">
+                    <!-- Overall rankings will be inserted here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Interview View -->
+        <div id="interviewView" class="view-container hidden">
+            <div class="card p-8 mb-8">
+                <h2 class="text-3xl font-bold mb-6 gradient-text">
+                    <i class="fas fa-microphone-alt mr-3"></i>
+                    AI Interview Preparation
+                </h2>
+                
+                <p class="text-gray-300 mb-6">Upload your resume to generate AI-powered interview questions. Answer them to get a performance score!</p>
+                
+                <!-- Resume Upload for Interview -->
+                <div class="mb-6">
+                    <label class="block text-sm font-semibold text-gray-300 mb-3">
+                        <i class="fas fa-file-upload mr-2"></i>Upload Resume for Interview
+                    </label>
+                    <div id="interviewUploadArea" class="upload-zone rounded-xl p-12 text-center cursor-pointer">
+                        <input type="file" id="interviewFile" accept=".pdf" class="hidden">
+                        <i class="fas fa-cloud-upload-alt text-6xl text-purple-400 mb-4"></i>
+                        <p class="text-gray-300 mb-2 font-semibold">Upload your resume</p>
+                        <p id="interviewFileName" class="text-sm gradient-text mt-3 font-semibold"></p>
+                    </div>
+                </div>
+                
+                <button onclick="startInterview()" class="btn-primary w-full py-6 rounded-xl font-bold text-lg">
+                    <i class="fas fa-play mr-2"></i>Generate Interview Questions
+                </button>
+            </div>
+            
+            <!-- Interview Questions -->
+            <div id="interviewQuestions" class="hidden">
+                <div class="card p-8 mb-8">
+                    <h3 class="text-2xl font-bold mb-6 gradient-text">
+                        <i class="fas fa-question-circle mr-2"></i>
+                        Interview Questions
+                    </h3>
+                    
+                    <div id="questionsList" class="space-y-6">
+                        <!-- Questions will be inserted here -->
+                    </div>
+                    
+                    <button onclick="submitInterview()" class="btn-primary w-full py-6 rounded-xl font-bold text-lg mt-8">
+                        <i class="fas fa-paper-plane mr-2"></i>Submit Answers & Get Score
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Interview Results -->
+            <div id="interviewResults" class="hidden">
+                <div class="card p-8">
+                    <h3 class="text-2xl font-bold mb-6 text-center gradient-text">
+                        <i class="fas fa-star mr-2"></i>
+                        Your Interview Performance
+                    </h3>
+                    
+                    <div class="text-center mb-8">
+                        <div class="score-circle mx-auto mb-4" style="--score: 75">
+                            <div class="score-text mono" id="interviewScoreDisplay">--</div>
+                        </div>
+                        <p class="text-xl text-gray-300 font-semibold">Interview Score</p>
+                    </div>
+                    
+                    <div id="answerFeedback" class="space-y-6">
+                        <!-- Answer feedback will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="glassmorphism mt-16 py-8">
+        <div class="container mx-auto px-6 text-center">
+            <p class="text-sm text-gray-400">
+                <i class="fas fa-shield-alt mr-2"></i>
+                Your data is processed securely and stored encrypted in MongoDB Atlas
+            </p>
+            <p class="text-xs mt-2 text-gray-500 mono">
+                Powered by FastAPI • Gemini AI • Firebase Auth • MongoDB • TailwindCSS
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Global variables
+        let selectedAnalysisType = 'basic';
+        let currentResults = null;
+        let currentInterviewId = null;
+        let interviewQuestions = [];
+        let authToken = null;
+        
+        // Firebase configuration (replace with your config)
+        const firebaseConfig = {
+            // Add your Firebase config here
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+        };
+        
+        // Initialize Firebase (if config is provided)
+        if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+            firebase.initializeApp(firebaseConfig);
+            
+            // Auth state observer
+            firebase.auth().onAuthStateChanged((user) => {
+                if (user) {
+                    user.getIdToken().then((token) => {
+                        authToken = token;
+                        document.getElementById('userProfile').classList.remove('hidden');
+                        document.getElementById('loginButton').classList.add('hidden');
+                        loadUserStats();
+                    });
+                } else {
+                    authToken = null;
+                    document.getElementById('userProfile').classList.add('hidden');
+                    document.getElementById('loginButton').classList.remove('hidden');
+                }
+            });
+        }
+        
+        // View management
+        function showView(viewName) {
+            document.querySelectorAll('.view-container').forEach(view => {
+                view.classList.add('hidden');
+            });
+            document.getElementById(viewName + 'View').classList.remove('hidden');
+        }
+        
+        // Authentication
+        function showLogin() {
+            const email = prompt('Enter your email:');
+            const password = prompt('Enter your password:');
+            
+            firebase.auth().signInWithEmailAndPassword(email, password)
+                .catch((error) => {
+                    alert('Login failed: ' + error.message);
+                });
+        }
+        
+        function logout() {
+            firebase.auth().signOut();
+        }
+        
+        // File upload handling
+        const setupFileUpload = (areaId, inputId, fileNameId, multiple = false) => {
+            const uploadArea = document.getElementById(areaId);
+            const fileInput = document.getElementById(inputId);
+            const fileName = document.getElementById(fileNameId);
+            
+            uploadArea.addEventListener('click', () => fileInput.click());
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('drag-over');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('drag-over');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                
+                if (multiple) {
+                    fileInput.files = e.dataTransfer.files;
+                    fileName.textContent = `${e.dataTransfer.files.length} files selected`;
+                } else {
+                    const file = e.dataTransfer.files[0];
+                    if (file && file.type === 'application/pdf') {
+                        fileInput.files = e.dataTransfer.files;
+                        fileName.textContent = file.name;
+                    }
+                }
+            });
+            
+            fileInput.addEventListener('change', (e) => {
+                if (multiple) {
+                    fileName.textContent = `${e.target.files.length} files selected`;
+                } else if (e.target.files[0]) {
+                    fileName.textContent = e.target.files[0].name;
+                }
+            });
+        };
+        
+        // Setup all file uploads
+        setupFileUpload('uploadArea', 'resumeFile', 'fileName');
+        setupFileUpload('batchUploadArea', 'batchFiles', 'batchFileCount', true);
+        setupFileUpload('interviewUploadArea', 'interviewFile', 'interviewFileName');
+        
+        // Analysis type selection
+        function selectAnalysisType(type) {
+            selectedAnalysisType = type;
+            document.querySelectorAll('.analysis-btn').forEach(btn => {
+                btn.classList.remove('bg-purple-600', 'text-white', 'neon-border');
+                btn.classList.add('bg-gray-800', 'text-gray-300');
+            });
+            event.currentTarget.classList.remove('bg-gray-800', 'text-gray-300');
+            event.currentTarget.classList.add('bg-purple-600', 'text-white', 'neon-border');
+        }
+        
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('tab-active');
+                btn.classList.add('text-gray-400');
+            });
+            event.currentTarget.classList.add('tab-active');
+            event.currentTarget.classList.remove('text-gray-400');
+            
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById(tabName + 'Tab').classList.remove('hidden');
+        }
+        
+        // Single resume analysis
+        async function analyzeResume() {
+            const file = document.getElementById('resumeFile').files[0];
+            const text = document.getElementById('resumeText').value;
+            const jd = document.getElementById('jdText').value;
+            
+            if (!file && !text.trim()) {
+                alert('Please upload a resume or paste resume text');
+                return;
+            }
+            
+            document.getElementById('loadingState').classList.remove('hidden');
+            document.getElementById('resultsSection').classList.add('hidden');
+            
+            const formData = new FormData();
+            if (file) formData.append('resume_file', file);
+            if (text.trim()) formData.append('resume_text', text);
+            if (jd.trim()) formData.append('jd_text', jd);
+            formData.append('analysis_type', selectedAnalysisType);
+            
+            try {
+                const headers = {};
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers,
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Analysis failed');
+                
+                const data = await response.json();
+                currentResults = data;
+                displayResults(data);
+                
+            } catch (error) {
+                alert('Error analyzing resume: ' + error.message);
+            } finally {
+                document.getElementById('loadingState').classList.add('hidden');
+            }
+        }
+        
+        // Display single resume results
+        function displayResults(data) {
+            const scores = data.ats_scores;
+            
+            const finalScore = Math.round(scores.final_score);
+            document.getElementById('finalScore').textContent = finalScore;
+            document.querySelector('.score-circle').style.setProperty('--score', finalScore);
+            
+            let label = '';
+            let labelClass = '';
+            if (finalScore >= 80) {
+                label = '🎉 Excellent - ATS Optimized!';
+                labelClass = 'text-green-400';
+            } else if (finalScore >= 60) {
+                label = '👍 Good - Minor Improvements Needed';
+                labelClass = 'text-yellow-400';
+            } else {
+                label = '🔧 Needs Improvement';
+                labelClass = 'text-red-400';
+            }
+            const scoreLabel = document.getElementById('scoreLabel');
+            scoreLabel.textContent = label;
+            scoreLabel.className = 'text-lg font-semibold mt-2 ' + labelClass;
+            
+            updateScoreBar('section', scores.section_score);
+            updateScoreBar('keyword', scores.keyword_score);
+            updateScoreBar('action', scores.action_score);
+            updateScoreBar('metric', scores.metric_score);
+            
+            const suggestionsList = document.getElementById('suggestionsList');
+            suggestionsList.innerHTML = '';
+            data.suggestions.forEach(suggestion => {
+                const div = document.createElement('div');
+                div.className = 'bg-purple-900 bg-opacity-30 border-l-4 border-purple-500 p-5 rounded-lg';
+                div.innerHTML = `<p class="text-gray-200 text-lg">${suggestion}</p>`;
+                suggestionsList.appendChild(div);
+            });
+            
+            const sectionsList = document.getElementById('sectionsList');
+            sectionsList.innerHTML = '';
+            for (const [section, found] of Object.entries(scores.sections_found)) {
+                const div = document.createElement('div');
+                div.className = `flex items-center justify-between p-5 rounded-lg ${found ? 'bg-green-900 bg-opacity-30' : 'bg-red-900 bg-opacity-30'}`;
+                div.innerHTML = `
+                    <span class="font-semibold text-lg ${found ? 'text-green-300' : 'text-red-300'}">${section}</span>
+                    <i class="fas ${found ? 'fa-check-circle text-green-400' : 'fa-times-circle text-red-400'} text-2xl"></i>
+                `;
+                sectionsList.appendChild(div);
+            }
+            
+            const bulletsList = document.getElementById('bulletsList');
+            bulletsList.innerHTML = '';
+            scores.bullets.slice(0, 10).forEach((bullet, idx) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-800 bg-opacity-50 p-4 rounded-lg border-l-4 border-purple-500';
+                div.innerHTML = `<p class="text-gray-200"><strong class="gradient-text">${idx + 1}.</strong> ${bullet}</p>`;
+                bulletsList.appendChild(div);
+            });
+            
+            const weakPhrasesList = document.getElementById('weakPhrasesList');
+            weakPhrasesList.innerHTML = '';
+            if (data.weak_phrases.length === 0) {
+                weakPhrasesList.innerHTML = '<p class="text-green-400 font-semibold text-lg"><i class="fas fa-check-circle mr-2"></i>No weak phrases detected! Great job!</p>';
+            } else {
+                const uniquePhrases = [...new Set(data.weak_phrases.map(wp => wp.phrase))];
+                uniquePhrases.forEach(phrase => {
+                    const count = data.weak_phrases.filter(wp => wp.phrase === phrase).length;
+                    const div = document.createElement('div');
+                    div.className = 'bg-red-900 bg-opacity-30 border-l-4 border-red-500 p-5 rounded-lg mb-4';
+                    div.innerHTML = `
+                        <p class="font-semibold text-red-300 text-lg">"${phrase}"</p>
+                        <p class="text-sm text-gray-400 mt-2">Found ${count} time(s) - Replace with stronger action verbs</p>
+                    `;
+                    weakPhrasesList.appendChild(div);
+                });
+            }
+            
+            if (data.ai_analysis) {
+                const aiInsights = document.getElementById('aiInsights');
+                if (data.ai_analysis.raw_response) {
+                    aiInsights.innerHTML = `<div class="bg-gray-800 bg-opacity-50 p-6 rounded-lg"><pre class="whitespace-pre-wrap text-gray-300">${data.ai_analysis.raw_response}</pre></div>`;
+                } else {
+                    const formatted = formatAIAnalysis(data.ai_analysis, data.analysis_type);
+                    aiInsights.innerHTML = formatted;
+                }
+            }
+            
+            document.getElementById('resultsSection').classList.remove('hidden');
+            document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function updateScoreBar(type, score) {
+            const bar = document.getElementById(type + 'Bar');
+            const scoreText = document.getElementById(type + 'Score');
+            const roundedScore = Math.round(score);
+            
+            if (bar) {
+                setTimeout(() => {
+                    bar.style.width = roundedScore + '%';
+                }, 100);
+            }
+            if (scoreText) scoreText.textContent = roundedScore;
+        }
+        
+        function formatAIAnalysis(data, type) {
+            let html = '<div class="space-y-6">';
+            
+            if (type === 'match') {
+                if (data.match_percentage) {
+                    html += `<div class="bg-purple-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-xl mb-2 gradient-text">JD Match: ${data.match_percentage}</h4>
+                    </div>`;
+                }
+                if (data.missing_keywords && data.missing_keywords.length > 0) {
+                    html += `<div class="bg-yellow-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-lg mb-3 text-yellow-300">Missing Keywords:</h4>
+                        <div class="flex flex-wrap gap-3">
+                            ${data.missing_keywords.map(kw => `<span class="bg-yellow-600 bg-opacity-50 px-4 py-2 rounded-full text-sm font-semibold">${kw}</span>`).join('')}
+                        </div>
+                    </div>`;
+                }
+                if (data.profile_summary) {
+                    html += `<div class="bg-blue-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-lg mb-3 text-blue-300">Profile Summary:</h4>
+                        <p class="text-gray-200">${data.profile_summary}</p>
+                    </div>`;
+                }
+            } else if (type === 'review') {
+                if (data.rating) {
+                    html += `<div class="bg-green-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-xl mb-2 gradient-text">Rating: ${data.rating}/10</h4>
+                    </div>`;
+                }
+                if (data.strengths && data.strengths.length > 0) {
+                    html += `<div class="bg-green-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-lg mb-3 text-green-300">Strengths:</h4>
+                        <ul class="space-y-2">
+                            ${data.strengths.map(s => `<li class="text-gray-200"><i class="fas fa-check mr-2 text-green-400"></i>${s}</li>`).join('')}
+                        </ul>
+                    </div>`;
+                }
+                if (data.weaknesses && data.weaknesses.length > 0) {
+                    html += `<div class="bg-red-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-lg mb-3 text-red-300">Weaknesses:</h4>
+                        <ul class="space-y-2">
+                            ${data.weaknesses.map(w => `<li class="text-gray-200"><i class="fas fa-times mr-2 text-red-400"></i>${w}</li>`).join('')}
+                        </ul>
+                    </div>`;
+                }
+            } else if (type === 'skills') {
+                if (data.current_skills && data.current_skills.length > 0) {
+                    html += `<div class="bg-blue-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-lg mb-3 text-blue-300">Current Skills:</h4>
+                        <div class="flex flex-wrap gap-3">
+                            ${data.current_skills.map(s => `<span class="bg-blue-600 bg-opacity-50 px-4 py-2 rounded-full text-sm font-semibold">${s}</span>`).join('')}
+                        </div>
+                    </div>`;
+                }
+                if (data.skill_gaps && data.skill_gaps.length > 0) {
+                    html += `<div class="bg-red-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-lg mb-3 text-red-300">Skill Gaps:</h4>
+                        <div class="flex flex-wrap gap-3">
+                            ${data.skill_gaps.map(s => `<span class="bg-red-600 bg-opacity-50 px-4 py-2 rounded-full text-sm font-semibold">${s}</span>`).join('')}
+                        </div>
+                    </div>`;
+                }
+                if (data.trending_skills && data.trending_skills.length > 0) {
+                    html += `<div class="bg-purple-900 bg-opacity-30 p-6 rounded-lg">
+                        <h4 class="font-bold text-lg mb-3 text-purple-300">Trending Skills:</h4>
+                        <div class="flex flex-wrap gap-3">
+                            ${data.trending_skills.map(s => `<span class="bg-purple-600 bg-opacity-50 px-4 py-2 rounded-full text-sm font-semibold">${s}</span>`).join('')}
+                        </div>
+                    </div>`;
+                }
+            }
+            
+            html += '</div>';
+            return html;
+        }
+        
+        // Batch analysis
+        async function analyzeBatch() {
+            const files = document.getElementById('batchFiles').files;
+            const jd = document.getElementById('batchJdText').value;
+            
+            if (files.length === 0) {
+                alert('Please upload at least one resume');
+                return;
+            }
+            
+            if (!jd.trim()) {
+                alert('Please provide a job description for ranking');
+                return;
+            }
+            
+            const formData = new FormData();
+            for (let file of files) {
+                formData.append('files', file);
+            }
+            formData.append('jd_text', jd);
+            
+            try {
+                const headers = {};
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch('/api/batch-analyze', {
+                    method: 'POST',
+                    headers,
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Batch analysis failed');
+                
+                const data = await response.json();
+                displayBatchResults(data);
+                
+            } catch (error) {
+                alert('Error analyzing batch: ' + error.message);
+            }
+        }
+        
+        function displayBatchResults(data) {
+            const rankingsList = document.getElementById('rankingsList');
+            rankingsList.innerHTML = '';
+            
+            data.results.forEach((result, idx) => {
+                const div = document.createElement('div');
+                const rankClass = idx < 3 ? `rank-${idx + 1}` : '';
+                
+                div.className = 'card p-6 flex items-center gap-6';
+                div.innerHTML = `
+                    <div class="rank-badge ${rankClass}">
+                        ${result.rank}
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="text-xl font-bold gradient-text mb-2">${result.filename}</h4>
+                        <div class="grid grid-cols-3 gap-4 text-sm">
+                            <div>
+                                <span class="text-gray-400">ATS Score:</span>
+                                <span class="font-bold text-white ml-2">${result.ats_scores.final_score}%</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">JD Match:</span>
+                                <span class="font-bold text-white ml-2">${result.jd_match}%</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Eligible:</span>
+                                <span class="font-bold ml-2 ${result.eligible_for_interview ? 'text-green-400' : 'text-red-400'}">
+                                    ${result.eligible_for_interview ? '✓ Yes' : '✗ No'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        ${result.eligible_for_interview ? 
+                            '<span class="bg-green-600 px-4 py-2 rounded-lg font-semibold">Qualified for Interview</span>' :
+                            '<span class="bg-red-600 px-4 py-2 rounded-lg font-semibold">Not Qualified</span>'}
+                    </div>
+                `;
+                rankingsList.appendChild(div);
+            });
+            
+            document.getElementById('batchResults').classList.remove('hidden');
+        }
+        
+        // Interview functions
+        async function startInterview() {
+            const file = document.getElementById('interviewFile').files[0];
+            
+            if (!file) {
+                alert('Please upload your resume');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('resume_file', file);
+            
+            try {
+                const headers = {};
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch('/api/interview/generate-questions', {
+                    method: 'POST',
+                    headers,
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Failed to generate questions');
+                
+                const data = await response.json();
+                currentInterviewId = data.interview_id;
+                interviewQuestions = data.questions;
+                
+                displayInterviewQuestions(data.questions);
+                
+            } catch (error) {
+                alert('Error generating questions: ' + error.message);
+            }
+        }
+        
+        function displayInterviewQuestions(questions) {
+            const questionsList = document.getElementById('questionsList');
+            questionsList.innerHTML = '';
+            
+            questions.forEach((q, idx) => {
+                const div = document.createElement('div');
+                div.className = 'interview-question';
+                div.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <h4 class="text-lg font-bold gradient-text">Question ${idx + 1}</h4>
+                        <span class="px-3 py-1 rounded-full text-xs font-bold ${
+                            q.difficulty === 'easy' ? 'bg-green-600' :
+                            q.difficulty === 'medium' ? 'bg-yellow-600' :
+                            'bg-red-600'
+                        }">${q.difficulty.toUpperCase()}</span>
+                    </div>
+                    <p class="text-gray-200 mb-4">${q.question}</p>
+                    <textarea 
+                        id="answer-${idx}" 
+                        rows="4" 
+                        class="w-full bg-gray-900 bg-opacity-50 border border-gray-700 rounded-lg p-4 text-white"
+                        placeholder="Type your answer here or use voice input..."></textarea>
+                    <div class="mt-3 text-center">
+                        <button onclick="startVoiceInput(${idx})" class="mic-button" id="mic-${idx}">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <p class="text-xs text-gray-400 mt-2">Click to answer via voice</p>
+                    </div>
+                `;
+                questionsList.appendChild(div);
+            });
+            
+            document.getElementById('interviewQuestions').classList.remove('hidden');
+        }
+        
+        // Voice input (simplified version - would need Web Speech API)
+        function startVoiceInput(questionIdx) {
+            alert('Voice input feature - would integrate with Web Speech API');
+            // In production, implement Web Speech API here
+        }
+        
+        async function submitInterview() {
+            const answers = [];
+            
+            for (let i = 0; i < interviewQuestions.length; i++) {
+                const answer = document.getElementById(`answer-${i}`).value;
+                answers.push({
+                    question_idx: i,
+                    answer: answer
+                });
+            }
+            
+            const formData = new FormData();
+            formData.append('interview_id', currentInterviewId);
+            formData.append('answers', JSON.stringify(answers));
+            
+            try {
+                const headers = {};
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch('/api/interview/submit-answers', {
+                    method: 'POST',
+                    headers,
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Failed to submit answers');
+                
+                const data = await response.json();
+                displayInterviewResults(data);
+                
+            } catch (error) {
+                alert('Error submitting answers: ' + error.message);
+            }
+        }
+        
+        function displayInterviewResults(data) {
+            document.getElementById('interviewScoreDisplay').textContent = Math.round(data.interview_score);
+            document.querySelector('#interviewResults .score-circle').style.setProperty('--score', data.interview_score);
+            
+            const feedbackDiv = document.getElementById('answerFeedback');
+            feedbackDiv.innerHTML = '';
+            
+            data.evaluated_answers.forEach((item, idx) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-800 bg-opacity-50 p-6 rounded-lg';
+                div.innerHTML = `
+                    <h4 class="font-bold gradient-text mb-2">Question ${idx + 1}</h4>
+                    <p class="text-gray-300 mb-3">${item.question}</p>
+                    <div class="bg-gray-900 bg-opacity-50 p-4 rounded mb-3">
+                        <p class="text-sm text-gray-400">Your Answer:</p>
+                        <p class="text-gray-200">${item.answer}</p>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-bold">Score:</span>
+                        <span class="text-xl font-bold gradient-text">${item.evaluation.score}/10</span>
+                    </div>
+                    <p class="text-gray-300 text-sm">${item.evaluation.feedback}</p>
+                `;
+                feedbackDiv.appendChild(div);
+            });
+            
+            document.getElementById('interviewResults').classList.remove('hidden');
+            document.getElementById('interviewResults').scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Download functions
+        function downloadReport() {
+            // Would implement actual download from API
+            alert('Download report feature - connects to /api/download-report endpoint');
+        }
+        
+        function downloadBatchReports() {
+            alert('Download batch reports feature - connects to /api/download-batch-reports endpoint');
+        }
+        
+        function exportRankingsCSV() {
+            alert('Export to CSV feature - connects to /api/export-rankings-csv endpoint');
+        }
+        
+        // Load user stats
+        async function loadUserStats() {
+            try {
+                const headers = {};
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch('/api/user/history', { headers });
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                document.getElementById('totalAnalyzed').textContent = data.history.length;
+                
+                if (data.history.length > 0) {
+                    const avgScore = data.history.reduce((sum, h) => sum + h.score, 0) / data.history.length;
+                    document.getElementById('avgScore').textContent = Math.round(avgScore);
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        async function loadRankings() {
+            const filter = document.getElementById('rankingsFilter').value;
+            
+            try {
+                const headers = {};
+                if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+                
+                const response = await fetch(`/api/rankings?jd_text=${encodeURIComponent(filter)}`, { headers });
+                if (!response.ok) throw new Error('Failed to load rankings');
+                
+                const data = await response.json();
+                displayOverallRankings(data.rankings);
+                
+            } catch (error) {
+                alert('Error loading rankings: ' + error.message);
+            }
+        }
+        
+        function displayOverallRankings(rankings) {
+            const container = document.getElementById('overallRankings');
+            container.innerHTML = '';
+            
+            if (rankings.length === 0) {
+                container.innerHTML = '<p class="text-gray-400 text-center">No rankings found</p>';
+                return;
+            }
+            
+            rankings.forEach((item) => {
+                const div = document.createElement('div');
+                div.className = 'card p-6 flex items-center gap-6';
+                div.innerHTML = `
+                    <div class="rank-badge ${item.rank <= 3 ? 'rank-' + item.rank : ''}">
+                        ${item.rank}
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="text-xl font-bold gradient-text mb-2">${item.filename}</h4>
+                        <div class="grid grid-cols-4 gap-4 text-sm">
+                            <div>
+                                <span class="text-gray-400">ATS Score:</span>
+                                <span class="font-bold text-white ml-2">${item.ats_score}%</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">JD Match:</span>
+                                <span class="font-bold text-white ml-2">${item.jd_match}%</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Interview:</span>
+                                <span class="font-bold text-white ml-2">${item.interview_score}%</span>
+                            </div>
+                            <div>
+                                <span class="text-gray-400">Combined:</span>
+                                <span class="font-bold text-white ml-2">${item.combined_score}%</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>
